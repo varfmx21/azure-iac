@@ -9,7 +9,7 @@
 resource "azurerm_postgresql_flexible_server" "db" {
   name                          = "psql-${var.name_prefix}-${random_string.suffix.result}"
   resource_group_name           = azurerm_resource_group.rg.name
-  location                      = azurerm_resource_group.rg.location
+  location                      = coalesce(var.db_location, azurerm_resource_group.rg.location)
   version                       = "16"
   administrator_login           = var.db_admin_login
   administrator_password        = var.db_admin_password

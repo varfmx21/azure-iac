@@ -44,3 +44,9 @@ variable "db_admin_password" {
   type        = string
   sensitive   = true
 }
+
+variable "db_location" {
+  description = "Region of the PostgreSQL server. Null = same as the resource group."
+  type        = string
+  default     = null
+}
