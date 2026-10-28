@@ -1,0 +1,11 @@
+<!-- Add inside <dependencies> of forgetask/pom.xml (keep the Oracle dependencies; they are harmless). -->
+<dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+    <scope>runtime</scope>
+</dependency>
+<!-- HikariCP is excluded from spring-boot-starter-jdbc in this pom, so add it explicitly. -->
+<dependency>
+    <groupId>com.zaxxer</groupId>
+    <artifactId>HikariCP</artifactId>
+</dependency>

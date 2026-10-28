@@ -1,0 +1,61 @@
+name: infra (terraform)
+
+on:
+  pull_request:
+    paths: ["terraform/**"]
+  push:
+    branches: [main]
+    paths: ["terraform/**"]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "apply or destroy"
+        type: choice
+        options: [apply, destroy]
+        default: apply
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_db_admin_password: ${{ secrets.DB_PASSWORD }}
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Format check
+        run: terraform fmt -recursive
+
+      - name: Init (remote state in Azure Storage)
+        run: >
+          terraform init
+          -backend-config="resource_group_name=${{ secrets.TFSTATE_RG }}"
+          -backend-config="storage_account_name=${{ secrets.TFSTATE_SA }}"
+
+      - name: Validate
+        run: terraform validate
+
+      - name: Plan
+        if: github.event.inputs.action != 'destroy'
+        run: terraform plan -out=tfplan
+
+      - name: Apply
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event.inputs.action == 'apply'
+        run: terraform apply -auto-approve tfplan
+
+      - name: Destroy
+        if: github.event.inputs.action == 'destroy'
+        run: terraform destroy -auto-approve

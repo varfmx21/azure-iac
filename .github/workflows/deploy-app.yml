@@ -1,0 +1,102 @@
+name: deploy-app (build, push, deploy)
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_ref:
+        description: "Branch, tag or SHA of YOUR FORK of the app (with the azure profile patch)"
+        default: azure-compat
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  APP_REPO: varfmx21/azure-SaaS   # <- your fork, e.g. myuser/oci-chatbot
+  RG: rg-forgetask-baseline
+  AKS: aks-forgetask-baseline
+  NAMESPACE: forgetask
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout IaC repo (manifests)
+        uses: actions/checkout@v4
+        with:
+          path: iac
+
+      - name: Checkout app repo (your fork)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.APP_REPO }}
+          ref: ${{ inputs.app_ref }}
+          token: ${{ secrets.APP_REPO_TOKEN || github.token }}
+          path: app
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve registry and database
+        run: |
+          ACR=$(az acr list -g "$RG" --query "[0].name" -o tsv)
+          echo "ACR=$ACR" >> "$GITHUB_ENV"
+          echo "ACR_LOGIN_SERVER=$(az acr show -n "$ACR" --query loginServer -o tsv)" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=${GITHUB_SHA::8}" >> "$GITHUB_ENV"
+          DB_HOST=$(az postgres flexible-server list -g "$RG" --query "[0].fullyQualifiedDomainName" -o tsv)
+          echo "DB_URL=jdbc:postgresql://${DB_HOST}:5432/forgetask?sslmode=require" >> "$GITHUB_ENV"
+
+      - name: Build and push images
+        run: |
+          az acr login --name "$ACR"
+          docker build -t "$ACR_LOGIN_SERVER/forgetask:$IMAGE_TAG" app/forgetask
+          docker build --build-arg NEXT_PUBLIC_USE_PROXY=true \
+            -t "$ACR_LOGIN_SERVER/forgetask-frontend:$IMAGE_TAG" app/forgetask-frontend
+          docker push "$ACR_LOGIN_SERVER/forgetask:$IMAGE_TAG"
+          docker push "$ACR_LOGIN_SERVER/forgetask-frontend:$IMAGE_TAG"
+
+      - name: Connect to AKS
+        run: az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing
+
+      - name: Namespace and secrets
+        env:
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n "$NAMESPACE" create secret generic forgetask-app-secrets \
+            --from-literal=DB_URL="$DB_URL" \
+            --from-literal=DB_USER="$DB_USER" \
+            --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Install ingress-nginx (public entry point)
+        run: |
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+          helm repo update
+          helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+            --namespace ingress-nginx --create-namespace \
+            --set controller.service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-health-probe-request-path"=/healthz \
+            --wait
+
+      - name: Deploy workloads
+        run: |
+          for f in forgetask forgetask-frontend ingress; do
+            envsubst '${ACR_LOGIN_SERVER} ${IMAGE_TAG}' < iac/k8s/$f.yaml | kubectl -n "$NAMESPACE" apply -f -
+          done
+          kubectl -n "$NAMESPACE" rollout status deployment/forgetask-deployment --timeout=300s
+          kubectl -n "$NAMESPACE" rollout status deployment/forgetask-frontend-deployment --timeout=180s
+
+      - name: Show public URL
+        run: |
+          for i in $(seq 1 30); do
+            IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+            [ -n "$IP" ] && break; sleep 10
+          done
+          echo "### Public URL: http://$IP" | tee -a "$GITHUB_STEP_SUMMARY"

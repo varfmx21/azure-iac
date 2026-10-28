@@ -1,0 +1,78 @@
+# Backend (Spring Boot) running with the "azure" Spring profile (PostgreSQL).
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgetask-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app: forgetask
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forgetask-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: forgetask
+  template:
+    metadata:
+      labels:
+        app: forgetask
+        version: v1
+    spec:
+      containers:
+        - name: forgetask
+          image: ${ACR_LOGIN_SERVER}/forgetask:${IMAGE_TAG}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "azure"
+            - name: SPRING_DATASOURCE_URL
+              valueFrom: { secretKeyRef: { name: forgetask-app-secrets, key: DB_URL } }
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: forgetask-app-secrets, key: DB_USER } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: forgetask-app-secrets, key: DB_PASSWORD } }
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: forgetask-app-secrets, key: JWT_SECRET } }
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: APP_VERSION
+              value: "${IMAGE_TAG}"
+            - name: TELEGRAM_BOT_ENABLED
+              value: "false"
+            - name: LLM_PROVIDER
+              value: "groq"
+            - name: LLM_API_KEY
+              value: ""
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits: { cpu: "500m", memory: "1Gi" }
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
