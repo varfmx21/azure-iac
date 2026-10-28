@@ -12,7 +12,8 @@ Azure Database for PostgreSQL. Everything else in the SaaS is out of scope.
 ## Order
 1. Fork JRV-XVI/oci-chatbot, create branch azure-compat, apply app-patch/ (see files), push.
 2. Edit APP_REPO in .github/workflows/deploy-app.yml (your fork).
-3. Create empty GitHub repo for this kit; run scripts/bootstrap.sh; create the secrets it prints plus:
+3. Create empty GitHub repo for this kit; run `gh auth login` and `az login`, then run
+   `scripts/bootstrap.sh`; create the secrets it prints plus:
    DB_USER (= pgadmin), DB_PASSWORD (new strong password), JWT_SECRET (openssl rand -base64 48),
    APP_REPO_TOKEN (only if the fork is private).
 4. Push this kit to main -> workflow infra. Then run deploy-app.

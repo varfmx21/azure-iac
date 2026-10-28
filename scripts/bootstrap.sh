@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time bootstrap (run locally after `az login`).
+# One-time bootstrap (run locally after `az login` and `gh auth login`).
 # Creates what Terraform cannot create for itself:
 #  1) a storage account for the Terraform state
 #  2) an Entra ID app + federated credentials so GitHub Actions logs in without a stored password (OIDC)
@@ -11,6 +11,11 @@ STATE_SA="sttfstate${RANDOM}${RANDOM}"
 
 SUB_ID=$(az account show --query id -o tsv)
 TENANT_ID=$(az account show --query tenantId -o tsv)
+OWNER=${GITHUB_REPO%%/*}
+REPO=${GITHUB_REPO##*/}
+OWNER_ID=$(gh api "repos/$GITHUB_REPO" --jq .owner.id)
+REPO_ID=$(gh api "repos/$GITHUB_REPO" --jq .id)
+SUBJ_BASE="repo:${OWNER}@${OWNER_ID}/${REPO}@${REPO_ID}"
 
 az group create -n "$STATE_RG" -l "$LOCATION" -o none
 az storage account create -n "$STATE_SA" -g "$STATE_RG" -l "$LOCATION" \
@@ -27,7 +32,7 @@ for SUBJECT in "ref:refs/heads/main" "pull_request"; do
   az ad app federated-credential create --id "$APP_ID" --parameters "{
     \"name\": \"$NAME\",
     \"issuer\": \"https://token.actions.githubusercontent.com\",
-    \"subject\": \"repo:${GITHUB_REPO}:${SUBJECT}\",
+    \"subject\": \"${SUBJ_BASE}:${SUBJECT}\",
     \"audiences\": [\"api://AzureADTokenExchange\"]}" -o none
 done
 
