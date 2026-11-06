@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 env:
-  APP_REPO: varfmx21/azure-SaaS   # <- your fork, e.g. myuser/oci-chatbot
+  APP_REPO: varfmx21/azure-SaaS
   RG: rg-forgetask-baseline
   AKS: aks-forgetask-baseline
   NAMESPACE: forgetask
@@ -21,12 +21,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout IaC repo (manifests)
+      - name: Checkout IaC repo
         uses: actions/checkout@v4
         with:
           path: iac
 
-      - name: Checkout app repo (your fork)
+      - name: Checkout SaaS repo
         uses: actions/checkout@v4
         with:
           repository: ${{ env.APP_REPO }}
@@ -54,7 +54,7 @@ jobs:
         run: |
           az acr login --name "$ACR"
           docker build -t "$ACR_LOGIN_SERVER/forgetask:$IMAGE_TAG" app/forgetask
-          docker build --build-arg NEXT_PUBLIC_USE_PROXY=true \
+          docker build --build-arg NEXT_PUBLIC_USE_PROXY=true \ 
             -t "$ACR_LOGIN_SERVER/forgetask-frontend:$IMAGE_TAG" app/forgetask-frontend
           docker push "$ACR_LOGIN_SERVER/forgetask:$IMAGE_TAG"
           docker push "$ACR_LOGIN_SERVER/forgetask-frontend:$IMAGE_TAG"
