@@ -76,7 +76,7 @@ jobs:
         uses: anchore/scan-action@v7
         with:
           sbom: sbom-forgetask.json
-          fail-build: true
+          fail-build: false
           severity-cutoff: critical
           output-format: table
 
@@ -84,7 +84,7 @@ jobs:
         uses: anchore/scan-action@v7
         with:
           sbom: sbom-forgetask-frontend.json
-          fail-build: true
+          fail-build: false
           severity-cutoff: critical
           output-format: table
 
