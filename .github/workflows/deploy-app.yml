@@ -10,6 +10,8 @@ on:
 permissions:
   id-token: write
   contents: read
+  attestations: write
+  artifact-metadata: write
 
 env:
   APP_REPO: varfmx21/azure-SaaS
@@ -50,14 +52,67 @@ jobs:
           DB_HOST=$(az postgres flexible-server list -g "$RG" --query "[0].fullyQualifiedDomainName" -o tsv)
           echo "DB_URL=jdbc:postgresql://${DB_HOST}:5432/forgetask?sslmode=require" >> "$GITHUB_ENV"
 
-      - name: Build and push images
+      - name: Build images
+        run: |
+          docker build -t "$ACR_LOGIN_SERVER/forgetask:$IMAGE_TAG" app/forgetask
+          docker build --build-arg NEXT_PUBLIC_USE_PROXY=true \
+            -t "$ACR_LOGIN_SERVER/forgetask-frontend:$IMAGE_TAG" app/forgetask-frontend
+
+      - name: SBOM generation backend
+        uses: anchore/sbom-action@v0
+        with:
+          image: "${{ env.ACR_LOGIN_SERVER }}/forgetask:${{ env.IMAGE_TAG }}"
+          output-file: sbom-forgetask.json
+          format: cyclonedx-json
+
+      - name: SBOM generation frontend
+        uses: anchore/sbom-action@v0
+        with:
+          image: "${{ env.ACR_LOGIN_SERVER }}/forgetask-frontend:${{ env.IMAGE_TAG }}"
+          output-file: sbom-forgetask-frontend.json
+          format: cyclonedx-json
+
+      - name: Scan SBOM backend
+        uses: anchore/scan-action@v7
+        with:
+          sbom: sbom-forgetask.json
+          fail-build: true
+          severity-cutoff: critical
+
+      - name: Scan SBOM frontend
+        uses: anchore/scan-action@v7
+        with:
+          sbom: sbom-forgetask-frontend.json
+          fail-build: true
+          severity-cutoff: critical
+
+      - name: Push Backend Image
+        id: docker_push_bakend
         run: |
           az acr login --name "$ACR"
-          docker build -t "$ACR_LOGIN_SERVER/forgetask:$IMAGE_TAG" app/forgetask
-          docker build --build-arg NEXT_PUBLIC_USE_PROXY=true \ 
-            -t "$ACR_LOGIN_SERVER/forgetask-frontend:$IMAGE_TAG" app/forgetask-frontend
           docker push "$ACR_LOGIN_SERVER/forgetask:$IMAGE_TAG"
+
+      - name: Push Frontend Image
+        id: docker_push_frontend
+        run: |
+          az acr login --name "$ACR"
           docker push "$ACR_LOGIN_SERVER/forgetask-frontend:$IMAGE_TAG"
+
+        - name: Attest backend SBOM
+          uses: actions/attest@v4
+          with: 
+            subject-name: "${{ env.ACR_LOGIN_SERVER }}/forgetask"
+            subject-digest: "${{ steps.docker_push_backend.outputs.digest }}"
+            sbom-path: sbom-forgetask.json
+            push-to-registry: true
+
+        - name: Attest frontend SBOM
+          uses: actions/attest@v4
+          with: 
+            subject-name: "${{ env.ACR_LOGIN_SERVER }}/forgetask-frontend"
+            subject-digest: "${{ steps.docker_push_frontend.outputs.digest }}"
+            sbom-path: sbom-forgetask-frontend.json
+            push-to-registry: true
 
       - name: Connect to AKS
         run: az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing
