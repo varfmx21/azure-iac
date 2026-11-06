@@ -91,28 +91,32 @@ jobs:
         run: |
           az acr login --name "$ACR"
           docker push "$ACR_LOGIN_SERVER/forgetask:$IMAGE_TAG"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$ACR_LOGIN_SERVER/forgetask:$IMAGE_TAG" | cut -d'@' -f2)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
 
       - name: Push Frontend Image
         id: docker_push_frontend
         run: |
           az acr login --name "$ACR"
           docker push "$ACR_LOGIN_SERVER/forgetask-frontend:$IMAGE_TAG"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$ACR_LOGIN_SERVER/forgetask-frontend:$IMAGE_TAG" | cut -d'@' -f2)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
 
-        - name: Attest backend SBOM
-          uses: actions/attest@v4
-          with: 
-            subject-name: "${{ env.ACR_LOGIN_SERVER }}/forgetask"
-            subject-digest: "${{ steps.docker_push_backend.outputs.digest }}"
-            sbom-path: sbom-forgetask.json
-            push-to-registry: true
+      - name: Attest backend SBOM
+        uses: actions/attest@v4
+        with: 
+          subject-name: "${{ env.ACR_LOGIN_SERVER }}/forgetask"
+          subject-digest: "${{ steps.docker_push_bakend.outputs.digest }}"
+          sbom-path: sbom-forgetask.json
+          push-to-registry: true
 
-        - name: Attest frontend SBOM
-          uses: actions/attest@v4
-          with: 
-            subject-name: "${{ env.ACR_LOGIN_SERVER }}/forgetask-frontend"
-            subject-digest: "${{ steps.docker_push_frontend.outputs.digest }}"
-            sbom-path: sbom-forgetask-frontend.json
-            push-to-registry: true
+      - name: Attest frontend SBOM
+        uses: actions/attest@v4
+        with: 
+          subject-name: "${{ env.ACR_LOGIN_SERVER }}/forgetask-frontend"
+          subject-digest: "${{ steps.docker_push_frontend.outputs.digest }}"
+          sbom-path: sbom-forgetask-frontend.json
+          push-to-registry: true
 
       - name: Connect to AKS
         run: az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing
