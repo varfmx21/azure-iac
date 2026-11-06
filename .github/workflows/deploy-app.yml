@@ -78,6 +78,7 @@ jobs:
           sbom: sbom-forgetask.json
           fail-build: true
           severity-cutoff: critical
+          output-format: table
 
       - name: Scan SBOM frontend
         uses: anchore/scan-action@v7
@@ -85,6 +86,7 @@ jobs:
           sbom: sbom-forgetask-frontend.json
           fail-build: true
           severity-cutoff: critical
+          output-format: table
 
       - name: Push Backend Image
         id: docker_push_bakend
