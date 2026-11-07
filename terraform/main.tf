@@ -20,6 +20,8 @@ resource "azurerm_resource_group" "rg" {
   }
 }
 
+data "azurerm_client_config" "current" {}
+
 # 2) Virtual network + ONE flat subnet: the private IP space of the nodes (the OCI VCN).
 #    Flat on purpose: segmentation is a control added later.
 resource "azurerm_virtual_network" "vnet" {
