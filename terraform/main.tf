@@ -71,6 +71,16 @@ resource "azurerm_kubernetes_cluster" "aks" {
     service_cidr   = "10.20.0.0/16"
     dns_service_ip = "10.20.0.10"
   }
+
+  oidc_issuer_enabled       = true
+  workload_identity_enabled = true
+  key_vault_secrets_provider {
+    secret_rotation_enabled = true 
+  }
+
+  node_provisioning_profile {
+    mode = "Manual" 
+  }
 }
 
 # 5) AcrPull: without it the nodes cannot download images (ImagePullBackOff).
@@ -80,3 +90,36 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
   principal_id                     = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
   skip_service_principal_aad_check = true
 }
+
+resource "azurerm_key_vault" "kv" {
+  name = "kv-${var.name_prefix}-secrets"
+  location = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+
+  tenant_id = data.azurerm_client_config.current.tenant_id
+  sku_name = "standard"
+
+  rbac_authorization_enabled = true
+  purge_protection_enabled = true
+  soft_delete_retention_days = 7
+}
+
+resource "azurerm_user_assigned_identity" "workload_identity" {
+  name                = "id-aks-${var.name_prefix}-forgetask"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_role_assignment" "kv_secrets_user" {
+  scope                = azurerm_key_vault.kv.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_user_assigned_identity.workload_identity.principal_id
+}
+
+resource "azurerm_federated_identity_credential" "federated_credential" {
+  name                = "fic-${var.name_prefix}-forgetask-sa"
+  audience            = ["api://AzureADTokenExchange"]
+  issuer              = azurerm_kubernetes_cluster.aks.oidc_issuer_url
+  user_assigned_identity_id = azurerm_user_assigned_identity.workload_identity.id
+  subject             = "system:serviceaccount:forgetask:forgetask-sa"
+} 
