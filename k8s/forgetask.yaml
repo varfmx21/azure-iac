@@ -18,7 +18,7 @@ metadata:
   name: forgetask-sa
   namespace: forgetask
   annotations:
-    azure.workload.identity/client-id: "a0e510bb-f2c2-4846-a3d0-80a55af93283"
+    azure.workload.identity/client-id: "6809eb72-ea4e-4ac6-afa7-cebb140f54dd"
 ---
 apiVersion: secrets-store.csi.x-k8s.io/v1
 kind: SecretProviderClass
@@ -42,7 +42,7 @@ spec:
   parameters:
     usePodIdentity: "false"
     useVMManagedIdentity: "false"
-    clientID: "a0e510bb-f2c2-4846-a3d0-80a55af93283"
+    clientID: "6809eb72-ea4e-4ac6-afa7-cebb140f54dd"
     tenantId: "c66b6765-b794-4a2b-84ed-845b341c086a"
     keyvaultName: "kv-forgetask-secrets"
     objects: |
