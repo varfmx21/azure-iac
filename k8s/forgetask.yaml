@@ -12,6 +12,44 @@ spec:
   selector:
     app: forgetask
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: forgetask-sa
+  namespace: default 
+  annotations:
+    azure.workload.identity/client-id: "a0e510bb-f2c2-4846-a3d0-80a55af93283"
+---
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: forgetask-kv-provider
+  namespace: default
+spec:
+  provider: azure
+  secretObjects: 
+    - secretName: forgetask-app-secrets
+      type: Opaque
+      data:
+        - objectName: JWT-SECRET
+          key: JWT_SECRET
+        - objectName: DB-PASSWORD
+          key: DB_PASSWORD
+  parameters:
+    usePodIdentity: "false"
+    useVMManagedIdentity: "false"
+    clientID: "a0e510bb-f2c2-4846-a3d0-80a55af93283"
+    tenantId: "c66b6765-b794-4a2b-84ed-845b341c086a"
+    keyvaultName: "kv-forgetask-secrets"
+    objects: |
+      array:
+        - |
+          objectName: JWT-SECRET
+          objectType: secret
+        - |
+          objectName: DB-PASSWORD
+          objectType: secret
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -26,7 +64,9 @@ spec:
       labels:
         app: forgetask
         version: v1
+        azure.workload.identity/use: "true" 
     spec:
+      serviceAccountName: forgetask-sa
       containers:
         - name: forgetask
           image: ${ACR_LOGIN_SERVER}/forgetask:${IMAGE_TAG}
@@ -56,6 +96,10 @@ spec:
               value: "groq"
             - name: LLM_API_KEY
               value: ""
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
           resources:
             requests: { cpu: "250m", memory: "512Mi" }
             limits: { cpu: "500m", memory: "1Gi" }
@@ -76,3 +120,10 @@ spec:
             runAsNonRoot: true
             runAsUser: 1001
             runAsGroup: 1001
+      volumes:
+          - name: secrets-store-inline
+            csi:
+              driver: secrets-store.csi.k8s.io
+              readOnly: true
+              volumeAttributes:
+                secretProviderClass: "forgetask-kv-provider"
