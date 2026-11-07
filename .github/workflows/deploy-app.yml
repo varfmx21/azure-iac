@@ -123,19 +123,9 @@ jobs:
       - name: Connect to AKS
         run: az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing
 
-      - name: Namespace and secrets
-        env:
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      - name: Create Namespace
         run: |
           kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-          kubectl -n "$NAMESPACE" create secret generic forgetask-app-secrets \
-            --from-literal=DB_URL="$DB_URL" \
-            --from-literal=DB_USER="$DB_USER" \
-            --from-literal=DB_PASSWORD="$DB_PASSWORD" \
-            --from-literal=JWT_SECRET="$JWT_SECRET" \
-            --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Install ingress-nginx (public entry point)
         run: |

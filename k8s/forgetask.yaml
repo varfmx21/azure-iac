@@ -35,6 +35,10 @@ spec:
           key: JWT_SECRET
         - objectName: DB-PASSWORD
           key: DB_PASSWORD
+        - objectName: DB-URL
+          key: DB_URL
+        - objectName: DB-USER
+          key: DB_USER
   parameters:
     usePodIdentity: "false"
     useVMManagedIdentity: "false"
@@ -49,6 +53,13 @@ spec:
         - |
           objectName: DB-PASSWORD
           objectType: secret
+        - |
+          objectName: DB-URL
+          objectType: secret
+        - |
+          objectName: DB-USER
+          objectType: secret
+
 ---
 apiVersion: apps/v1
 kind: Deployment
